@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secure-app
+  template:
+    metadata:
+      labels:
+        app: secure-app
+    spec:
+      containers:
+      - name: app
+        image: secureacr.azurecr.io/secure-nginx:latest
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: secret-volume
+          mountPath: "/mnt/secrets-store"
+          readOnly: true
+      volumes:
+      - name: secret-volume
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: azure-kv-provider

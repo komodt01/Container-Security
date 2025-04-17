@@ -1,0 +1,21 @@
+[
+  {
+    "name": "secure-app",
+    "image": "secure-repo/image:latest",
+    "essential": true,
+    "portMappings": [
+      {
+        "containerPort": 80,
+        "hostPort": 80
+      }
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/ecs/secure",
+        "awslogs-region": "us-east-1",
+        "awslogs-stream-prefix": "ecs"
+      }
+    }
+  }
+]
