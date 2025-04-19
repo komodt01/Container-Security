@@ -1,0 +1,27 @@
+[
+  {
+    "name": "myapp",
+    "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/myapp-repo:latest",
+    "essential": true,
+    "portMappings": [
+      {
+        "containerPort": 3000,
+        "hostPort": 3000
+      }
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/ecs/myapp",
+        "awslogs-region": "<region>",
+        "awslogs-stream-prefix": "ecs"
+      }
+    },
+    "environment": [
+      {
+        "name": "NODE_ENV",
+        "value": "production"
+      }
+    ]
+  }
+]

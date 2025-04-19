@@ -1,5 +1,5 @@
-output "aks_name" {
-  value = azurerm_kubernetes_cluster.aks.name
+output "aks_cluster_name" {
+  value = azurerm_kubernetes_cluster.main.name
 }
 
 output "acr_login_server" {
