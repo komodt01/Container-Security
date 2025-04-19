@@ -1,7 +1,7 @@
 # AWS Container Security Lab (with Azure Reference)
 
 ## Overview
-This project designs a secure container architecture using AWS ECS Fargate, implementing DevSecOps best practices like vulnerability scanning (ECR), rootless containers, and least-privilege IAM roles. It demonstrates secure cloud workloads, Zero Trust, and compliance with NIST 800-53/PCI-DSS, suitable for CAQH’s cloud security needs. An Azure AKS/ACI implementation showcases cross-cloud expertise.
+This project designs a secure container architecture using AWS ECS Fargate, implementing DevSecOps best practices like vulnerability scanning (ECR), rootless containers, and least-privilege IAM roles. It demonstrates secure cloud workloads, Zero Trust, and compliance with NIST 800-53/PCI-DSS. An Azure AKS/ACI implementation showcases cross-cloud expertise.
 
 ## Design Objectives
 - **AWS Focus**:
