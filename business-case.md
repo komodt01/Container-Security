@@ -1,0 +1,3 @@
+# Business Case: Multi-Cloud Container Security
+
+A SaaS provider deploying workloads in AWS, Azure, and Google Cloud needs to standardize container security across platforms to meet customer trust and compliance expectations. This project implements secure Kubernetes deployments in EKS, AKS, and GKE with hardened Linux VMs, container scanning, least privilege IAM roles, network segmentation, and host-based intrusion detection (HIDS). Each environment is defined using Terraform and aligned with NIST 800-53 and ISO 27001 controls. The solution helps reduce the attack surface across environments while maintaining auditability, consistency, and availability of containerized services.
