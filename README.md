@@ -1,26 +1,71 @@
-# Container Security Project
+# Multi-Cloud Container Security Architecture (AWS, Azure, GCP)
 
-## Overview
-This project demonstrates secure container deployment on AWS ECS Fargate with Terraform, including security scans and compliance with NIST 800-53. It also provides an Azure AKS reference implementation for comparison.
+## Project Purpose
 
-## Architecture
-- **AWS**: Uses ECS Fargate, ECR with image scanning, IAM roles, Secrets Manager, VPC with Security Groups, and CloudWatch logging. See [aws-container-diagram.png](docs/aws-container-diagram.png).
-- **Azure**: Uses AKS, ACI, ACR with scans, Entra ID, Key Vault, VNet with NSG, and Azure Monitor. See [azure-container-diagram.png](docs/azure-container-diagram.png).
+This project demonstrates how to design and implement a **hardened, multi-cloud container platform** across **AWS, Azure, and Google Cloud Platform (GCP)**.
 
-## Setup
-- **AWS**: Follow [setup-aws.md](docs/setup-aws.md).
-- **Azure**: Follow [setup-azure.md](docs/setup-azure.md).
+The focus is security architecture, not just deployment. Each cloud uses its **native container and registry services**, wired into:
 
-## Results
-- **AWS**: See [results-aws.md](docs/results-aws.md).
-- **Azure**: See [results-azure.md](docs/results-azure.md).
+- Identity and Access Management (IAM)
+- Private networking and restricted ingress
+- Encryption at rest and in transit
+- Centralized logging and monitoring
+- Image scanning and least-privilege runtime
 
-## Compliance
-- Maps to NIST 800-53 and ISO 27001: [nist-iso-mapping.md](docs/nist-iso-mapping.md).
-- Security controls: [security-controls.md](docs/security-controls.md).
+> **Note:** This is a portfolio / learning project, not a production blueprint. Real-world deployments must be driven by business requirements, regulatory obligations, and organization-specific risk tolerance.
 
-## Lessons Learned
-- See [lessonslearned.md](docs/lessonslearned.md).
+---
 
-## Technologies Used
-- See [technologies.md](docs/technologies.md).
+## High-Level Architecture
+
+Each cloud follows the same security pattern:
+
+- **Build & Scan**
+  - Images built in CI/CD
+  - Pushed to cloud-native registries
+  - Scanned for vulnerabilities (Trivy / native scanners)
+
+- **Store & Protect**
+  - Registries private by default
+  - Access via IAM roles/identities only
+  - Encryption at rest with KMS / Key Vault / Cloud KMS
+
+- **Deploy & Run**
+  - Containers run on hardened platforms:
+    - **AWS:** EKS or ECS with IAM roles for tasks
+    - **Azure:** AKS with managed identities
+    - **GCP:** GKE with Workload Identity
+  - Network policies / security groups restrict east-west and north-south traffic
+  - Runtime config blocks privileged containers and writable root file systems
+
+- **Observe & Respond**
+  - Centralized logging into:
+    - **AWS:** CloudWatch / CloudTrail
+    - **Azure:** Log Analytics / Activity Logs
+    - **GCP:** Cloud Logging / Cloud Audit Logs
+  - Alerts on suspicious or denied actions
+
+See `diagrams/container_security_architecture.png` for a conceptual view.
+
+---
+
+## Repository Layout
+
+```text
+.
+├── README.md
+├── diagrams/
+│   └── container_security_architecture.png
+├── docs/
+│   ├── technologies.md
+│   ├── security_requirements.md
+│   └── risks_and_mitigations.md
+├── aws/
+│   ├── terraform/         # ECR/ECS or EKS, IAM, logging, KMS
+│   └── k8s-or-taskdefs/   # Kubernetes YAML or ECS task definitions
+├── azure/
+│   ├── terraform/         # ACR, AKS, managed identities, diagnostics
+│   └── k8s/               # AKS workload manifests
+└── gcp/
+    ├── terraform/         # Artifact Registry, GKE, Workload Identity, logging
+    └── k8s/               # GKE workload manifests
