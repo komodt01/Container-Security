@@ -1,103 +1,313 @@
-# Risks and Mitigations – Multi-Cloud Container Security
+# Risks and Mitigations — Multi-Cloud Container Security
 
-This document summarizes key risks for running containers in AWS, Azure, and GCP, and how this project’s architecture mitigates them.
+This document identifies key security risks associated with running containerized workloads across AWS, Azure, and Google Cloud and describes how I would address those risks architecturally.
+
+Some controls are demonstrated directly in this portfolio project, while others represent controls I would evaluate or require when moving the architecture into a production environment.
+
+The objective is not to make AWS, Azure, and Google Cloud implementations identical. The objective is to achieve consistent security outcomes using the capabilities appropriate to each platform.
 
 ---
 
 ## 1. Compromised Container Image
 
-**Risk:** An image with known vulnerabilities or embedded secrets is deployed to production.  
+**Risk:** A vulnerable, malicious, or improperly configured image is deployed into the environment.
 
-**Mitigations:**
-- Use private registries (ECR, ACR, Artifact Registry) with restricted access.  
-- Run image scanning (Trivy / native scanners) in CI/CD and on stored images.  
-- Block or fail builds when critical/high vulnerabilities exceed thresholds.  
+### Demonstrated in This Project
 
----
+- Private cloud container registries.
+- Container image scanning capabilities.
+- Minimal application container image.
+- Application container configured to run as a non-root user.
 
-## 2. Unauthorized Access to Registries
+### Production Architecture Considerations
 
-**Risk:** An attacker pulls images or pushes malicious images into a registry.  
+I would define a vulnerability-response policy that determines whether an image can proceed based on factors such as:
 
-**Mitigations:**
-- Enforce IAM / Azure AD / Google IAM roles with least privilege for push/pull.  
-- Use network controls (private endpoints, VPC peering, firewall rules).  
-- Monitor registry access logs and alert on unusual locations or identities.
+- Vulnerability severity.
+- Known exploitability.
+- Workload exposure.
+- Business criticality.
+- Availability of a remediation.
+- Existing compensating controls.
+- Approved risk exceptions.
 
----
+A critical or high-severity finding should therefore not automatically produce the same decision in every situation.
 
-## 3. Lateral Movement Inside the Cluster
+The decision flow would be:
 
-**Risk:** An attacker who compromises one pod can move laterally to other services.  
-
-**Mitigations:**
-- Apply Kubernetes Network Policies to restrict pod-to-pod traffic.  
-- Use security groups / NSGs / firewall rules around node pools.  
-- Isolate environments and sensitive workloads in separate clusters or namespaces.
+**Image → Scan → Evaluate Risk → Allow / Block / Exception → Deploy**
 
 ---
 
-## 4. Credential Leakage
+## 2. Unauthorized Registry Access
 
-**Risk:** Secrets are stored in images, code, or plain text configuration.  
+**Risk:** An unauthorized identity pulls sensitive images or pushes malicious or unapproved images into a container registry.
 
-**Mitigations:**
-- Store secrets only in AWS Secrets Manager, Azure Key Vault, or GCP Secret Manager.  
-- Permit secret access only via workload identities and least-privilege policies.  
-- Scan IaC and repositories periodically for hard-coded credentials.
+### Demonstrated in This Project
+
+The architecture uses cloud-native registries:
+
+- Amazon ECR.
+- Azure Container Registry.
+- Google Artifact Registry.
+
+The revised architecture also favors workload identities and IAM authorization rather than persistent registry credentials.
+
+### Production Architecture Considerations
+
+I would evaluate:
+
+- Least-privilege push and pull permissions.
+- Separation between build identities and runtime identities.
+- Administrative access restrictions.
+- Private registry connectivity where appropriate.
+- Registry audit logging.
+- Detection of unusual push, pull, or administrative activity.
+- Image immutability and artifact-integrity controls.
 
 ---
 
-## 5. Privilege Escalation from Containers
+## 3. Lateral Movement Between Workloads
 
-**Risk:** A container gains host-level privileges and compromises the node.  
+**Risk:** An attacker compromises one workload and uses its network access or identity permissions to reach other workloads or services.
 
-**Mitigations:**
-- Prevent privileged containers and disallow `hostPID`, `hostNetwork`, `hostPath` where possible.  
-- Run containers as non-root with read-only root file systems.  
-- Use admission policies / Pod Security settings to enforce constraints.
+### Demonstrated in This Project
+
+The cloud environments use dedicated networking and cloud-native network controls around the container platforms.
+
+### Production Architecture Considerations
+
+For Kubernetes environments, I would evaluate:
+
+- Kubernetes Network Policies.
+- Namespace and workload segmentation.
+- Separate environments for workloads with different trust requirements.
+- Controlled east-west communication.
+- Service-to-service identity where appropriate.
+
+For AWS ECS/Fargate, I would use Security Groups and network architecture to restrict workload communication to required paths.
+
+The architectural objective is:
+
+**Explicitly Required Communication → Allowed**
+
+**Unnecessary Communication → Denied**
+
+---
+
+## 4. Credential and Secret Exposure
+
+**Risk:** Credentials or secrets are embedded in source code, container images, Terraform configuration, environment files, or other insecure locations.
+
+### Demonstrated in This Project
+
+The architecture uses workload identity concepts across the cloud platforms and includes Google Secret Manager as an example of external secret storage.
+
+Secret values are intentionally excluded from the revised Terraform configuration.
+
+### Production Architecture Considerations
+
+I would evaluate:
+
+- AWS Secrets Manager or Parameter Store.
+- Azure Key Vault.
+- Google Secret Manager.
+- Workload identities instead of persistent credentials.
+- Least-privilege secret access.
+- Secret rotation requirements.
+- Repository and infrastructure-as-code secret scanning.
+- Audit logging for secret access.
+
+The preferred model is:
+
+**Workload Identity → Authorization → Secret Manager → Authorized Secret**
+
+rather than distributing long-lived credentials to workloads.
+
+---
+
+## 5. Excessive Container Privileges
+
+**Risk:** A compromised container obtains permissions that allow it to affect the underlying host, cluster, or other workloads.
+
+### Demonstrated in This Project
+
+The application Dockerfile runs the Node.js process as a non-root user.
+
+### Production Architecture Considerations
+
+Depending on the container platform, I would evaluate controls such as:
+
+- Preventing privileged containers.
+- Restricting host namespace access.
+- Restricting host filesystem mounts.
+- Read-only root filesystems where compatible with the application.
+- Linux capability restrictions.
+- Kubernetes Pod Security controls.
+- Admission policies.
+- Runtime security monitoring.
+
+These controls would need to be tested against application requirements rather than applied indiscriminately.
 
 ---
 
 ## 6. Inadequate Logging and Monitoring
 
-**Risk:** Security incidents go undetected due to missing or fragmented logs.  
+**Risk:** Security-relevant activity occurs without sufficient telemetry for detection, investigation, or response.
 
-**Mitigations:**
-- Centralize logs in CloudWatch/CloudTrail, Log Analytics, and Cloud Logging.  
-- Enable audit trails for API calls and configuration changes in each cloud.  
-- Configure alerts for denied authentications, policy violations, and unusual activity.
+### Demonstrated in This Project
+
+The architecture includes cloud-native logging and monitoring capabilities such as:
+
+- Amazon CloudWatch and AWS platform telemetry.
+- Azure Log Analytics and Azure Monitor.
+- Google Cloud logging and monitoring.
+
+### Production Architecture Considerations
+
+I would define which events are required based on the workload and threat model, including:
+
+- Administrative activity.
+- Authentication and authorization events.
+- Container platform changes.
+- Registry activity.
+- Workload failures.
+- Network-security events.
+- Security policy violations.
+- Vulnerability findings.
+
+I would also monitor the monitoring system itself.
+
+Loss of expected telemetry should be detectable rather than silently creating a visibility gap.
 
 ---
 
 ## 7. Misconfigured Network Exposure
 
-**Risk:** A service intended to be internal becomes exposed to the internet.  
+**Risk:** A workload intended for limited or internal access becomes unnecessarily exposed to the internet.
 
-**Mitigations:**
-- Use private subnets and internal load balancers where possible.  
-- Require explicit configuration for public endpoints and review security groups/NSGs.  
-- Periodically run perimeter reviews or cloud security posture checks.
+### Demonstrated in This Project
+
+The architecture review identified overly broad ingress as a security concern and revised the AWS design so that the application entry point and container workload have separate trust boundaries.
+
+The Azure and Google Cloud implementations similarly require network access to be tied to the intended application flow rather than opening a workload port simply because the application listens on it.
+
+### Production Architecture Considerations
+
+For each workload, I would determine:
+
+**Who needs access? → From where? → Through what entry point? → To which workload? → On which protocol/port?**
+
+I would then evaluate:
+
+- Public versus private endpoints.
+- Load balancers and ingress controllers.
+- Security Groups, NSGs, firewall policies, and Kubernetes Network Policies.
+- WAF requirements.
+- Egress restrictions.
+- Private connectivity.
+- Periodic exposure reviews.
 
 ---
 
-## 8. Drift Between Clouds
+## 8. Security Drift Between Clouds
 
-**Risk:** Security posture diverges between AWS, Azure, and GCP due to inconsistent configurations.  
+**Risk:** AWS, Azure, and Google Cloud environments gradually develop different security postures because the underlying services and configuration models differ.
 
-**Mitigations:**
-- Capture requirements in `security_requirements.md` and apply them consistently.  
-- Use Terraform and version control so changes are tracked and repeatable.  
-- Document cloud-specific differences clearly in sub-folder READMEs.
+The answer is not necessarily to force identical technical implementations.
+
+### Architecture Approach
+
+I would define common security requirements first and then map them to the appropriate cloud-native capabilities.
+
+For example:
+
+| Security Requirement | AWS | Azure | Google Cloud |
+|---|---|---|---|
+| Container Registry | ECR | ACR | Artifact Registry |
+| Workload Identity | IAM task/workload roles | Managed/Workload Identity | Workload Identity |
+| Network Enforcement | Security Groups/VPC controls | NSG/VNet controls | VPC firewall controls |
+| Secrets | Secrets Manager | Key Vault | Secret Manager |
+| Logging | CloudWatch/CloudTrail | Azure Monitor/Log Analytics | Cloud Logging/Audit Logs |
+
+Terraform and version control can then make those decisions repeatable and reviewable.
+
+The architectural goal is:
+
+**Consistent Security Requirement → Platform-Specific Implementation → Consistent Security Outcome**
 
 ---
 
-## 9. Overly Restrictive Controls Blocking Delivery
+## 9. Security Controls Blocking Legitimate Delivery
 
-**Risk:** Security controls are implemented in a way that slows or blocks teams, leading to bypasses.  
+**Risk:** Security controls are implemented without sufficient business context and unnecessarily prevent teams from deploying legitimate changes.
 
-**Mitigations:**
-- Integrate checks into CI/CD with clear feedback to developers.  
-- Provide exception and risk-acceptance processes where necessary.  
-- Start with monitor/alert mode before enforcing hard blocks on new controls.
+Controls that are routinely bypassed because they do not account for business requirements can ultimately weaken the security program.
 
+### Production Architecture Considerations
+
+I would define:
+
+- Clear deployment criteria.
+- Actionable feedback for developers.
+- Risk-based vulnerability thresholds.
+- Exception and risk-acceptance processes.
+- Approval requirements for higher-risk exceptions.
+- Expiration and review of exceptions.
+- Evidence showing why a deployment was allowed or blocked.
+
+New controls may initially operate in monitoring mode where appropriate so their impact can be understood before enforcement.
+
+The objective is not simply:
+
+**Finding = Block**
+
+The stronger decision model is:
+
+**Finding → Severity → Exploitability → Exposure → Business Criticality → Mitigations → Decision**
+
+---
+
+## 10. Availability and Resilience Failure
+
+**Risk:** Security architecture protects the workload but introduces a single point of failure or prevents the application from recovering when infrastructure fails.
+
+The original lab configurations used minimal infrastructure appropriate for demonstrating deployment. The architecture review identified resilience as an additional production requirement.
+
+### Production Architecture Considerations
+
+Depending on the workload requirements, I would evaluate:
+
+- Multiple container tasks, pods, or nodes.
+- Availability-zone or regional architecture.
+- Health checks.
+- Autoscaling.
+- Controlled rollback.
+- Registry availability.
+- Dependency failure.
+- Logging and monitoring failure.
+- Backup and recovery requirements.
+
+Security and resilience need to be evaluated together because a control that creates an unacceptable availability risk may not be the correct architecture.
+
+---
+
+## Architecture Perspective
+
+The common container security lifecycle across the three environments is:
+
+**Build → Scan → Store → Authenticate → Deploy → Protect at Runtime → Monitor → Respond**
+
+Each stage introduces different risks and requires different controls.
+
+The cloud implementations do not have to be identical. What needs to remain consistent is the reasoning used to determine:
+
+- What are we protecting?
+- What could go wrong?
+- Which control reduces that risk?
+- Where should the control be enforced?
+- What evidence shows that it worked?
+- What happens if the control fails?
+- What is the business impact?
+
+That is the security architecture model used throughout this project.
