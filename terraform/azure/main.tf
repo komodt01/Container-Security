@@ -100,6 +100,12 @@ resource "azurerm_kubernetes_cluster" "main" {
 
   role_based_access_control_enabled = true
 
+  # Collect AKS/container monitoring data in Log Analytics.
+  oms_agent {
+    log_analytics_workspace_id      = azurerm_log_analytics_workspace.main.id
+    msi_auth_for_monitoring_enabled = true
+  }
+
   tags = {
     Purpose = "Secure container workload"
   }
@@ -116,7 +122,7 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
 }
 
 # ----------------------------
-# Monitoring
+# AKS Control-Plane Diagnostics
 # ----------------------------
 
 resource "azurerm_monitor_diagnostic_setting" "aks_logs" {
