@@ -4,6 +4,10 @@ provider "aws" {
 
 data "aws_availability_zones" "available" {}
 
+# ----------------------------
+# VPC
+# ----------------------------
+
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
@@ -35,10 +39,11 @@ resource "aws_subnet" "public" {
 # ----------------------------
 
 resource "aws_subnet" "private" {
-  count             = 2
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(aws_vpc.main.cidr_block, 8, count.index + 10)
-  availability_zone = element(data.aws_availability_zones.available.names, count.index)
+  count                   = 2
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = cidrsubnet(aws_vpc.main.cidr_block, 8, count.index + 10)
+  availability_zone       = element(data.aws_availability_zones.available.names, count.index)
+  map_public_ip_on_launch = false
 
   tags = {
     Name = "private-subnet-${count.index + 1}"
@@ -56,6 +61,10 @@ resource "aws_internet_gateway" "main" {
     Name = "secure-vpc-igw"
   }
 }
+
+# ----------------------------
+# Route Tables
+# ----------------------------
 
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
@@ -76,13 +85,28 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "private-route-table"
+  }
+}
+
+resource "aws_route_table_association" "private" {
+  count          = 2
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private.id
+}
+
 # ----------------------------
 # Security Groups
 # ----------------------------
 
 resource "aws_security_group" "alb_sg" {
-  name   = "alb-sg"
-  vpc_id = aws_vpc.main.id
+  name        = "alb-sg"
+  description = "Security group for public application load balancer"
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 443
@@ -93,11 +117,11 @@ resource "aws_security_group" "alb_sg" {
   }
 
   egress {
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block]
-    description = "Application traffic to ECS tasks"
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ecs_sg.id]
+    description     = "Application traffic to ECS tasks"
   }
 
   tags = {
@@ -106,27 +130,100 @@ resource "aws_security_group" "alb_sg" {
 }
 
 resource "aws_security_group" "ecs_sg" {
-  name   = "ecs-sg"
-  vpc_id = aws_vpc.main.id
+  name        = "ecs-sg"
+  description = "Security group for ECS application tasks"
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port       = 3000
     to_port         = 3000
     protocol        = "tcp"
     security_groups = [aws_security_group.alb_sg.id]
-    description     = "Allow application traffic only from ALB"
+    description     = "Application traffic only from ALB"
   }
 
   egress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "HTTPS outbound for required service access"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+    description = "HTTPS to approved VPC endpoints"
   }
 
   tags = {
     Name = "ecs-sg"
+  }
+}
+
+resource "aws_security_group" "endpoint_sg" {
+  name        = "vpc-endpoint-sg"
+  description = "Allow ECS workloads to access AWS service VPC endpoints"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ecs_sg.id]
+    description     = "HTTPS from ECS tasks"
+  }
+
+  tags = {
+    Name = "vpc-endpoint-sg"
+  }
+}
+
+# ----------------------------
+# Private AWS Service Access
+# ----------------------------
+
+resource "aws_vpc_endpoint" "ecr_api" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.ecr.api"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.endpoint_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "ecr-api-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "ecr_dkr" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.ecr.dkr"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.endpoint_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "ecr-dkr-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "cloudwatch_logs" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.logs"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.endpoint_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "cloudwatch-logs-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.${var.region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [aws_route_table.private.id]
+
+  tags = {
+    Name = "s3-endpoint"
   }
 }
 
@@ -194,7 +291,7 @@ resource "aws_iam_role" "ecs_task_role" {
   })
 }
 
-# Add only application permissions actually required by the task.
+# Add only application permissions actually required by the workload.
 # Avoid attaching broad managed policies to the task role.
 
 # ----------------------------
@@ -228,7 +325,9 @@ resource "aws_ecs_task_definition" "myapp_task" {
   execution_role_arn = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn      = aws_iam_role.ecs_task_role.arn
 
-  container_definitions = file("aws/container-definitions.json")
+  container_definitions = file(
+    "${path.module}/../../aws/container-definitions.json"
+  )
 }
 
 # ----------------------------
@@ -264,10 +363,6 @@ resource "aws_lb_target_group" "app" {
     unhealthy_threshold = 2
   }
 }
-
-# NOTE:
-# In production, use an ACM certificate and HTTPS listener.
-# The certificate ARN would normally be passed as a variable.
 
 resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.app.arn
@@ -305,6 +400,10 @@ resource "aws_ecs_service" "myapp_service" {
   }
 
   depends_on = [
-    aws_lb_listener.https
+    aws_lb_listener.https,
+    aws_vpc_endpoint.ecr_api,
+    aws_vpc_endpoint.ecr_dkr,
+    aws_vpc_endpoint.cloudwatch_logs,
+    aws_vpc_endpoint.s3
   ]
 }
